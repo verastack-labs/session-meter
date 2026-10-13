@@ -69,7 +69,7 @@ export function stage(on: On): Stage {
     toasts.push(e.text)
     return { value: undefined }
   })
-  on('command.register', () => ({ value: undefined }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))

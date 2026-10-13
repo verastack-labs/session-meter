@@ -1,0 +1,6 @@
+{
+  "name": "session-meter",
+  "description": "session-meter, a Claude Code mod that shows usage limits, context and session totals",
+  "owner": { "name": "VeraStack Labs" },
+  "plugins": [{ "name": "session-meter", "source": "./" }]
+}
