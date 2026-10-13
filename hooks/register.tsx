@@ -6,6 +6,7 @@ import { INITIAL_ALERTS, dueAlerts } from './alerts'
 import type { Alert } from './alerts'
 import { statusText } from './status'
 import { toSnapshot } from './usage'
+import { meterView } from './view'
 
 const REFRESH_MS = 30_000
 
@@ -22,6 +23,8 @@ const snapshot = atom({ plugin: 'session-meter', key: 'snapshot' } as const, nul
 const counters = atom({ plugin: 'session-meter', key: 'counters' } as const, ZERO_COUNTERS)
 const alerts = atom({ plugin: 'session-meter', key: 'alerts' } as const, INITIAL_ALERTS)
 const checkedAt = atom({ plugin: 'session-meter', key: 'checkedAt' } as const, 0)
+const isPaneOpen = atom({ plugin: 'session-meter', key: 'isPaneOpen' } as const, false)
+const PANE_ID = 'session-meter'
 
 type Dollar = Pick<EngineInterface, 'state' | 'session' | 'ui' | 'clock'>
 
@@ -74,6 +77,7 @@ async function resetCounters($: Dollar): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    await $.command.register({ name: 'meter', description: 'Open or close the session-meter pane' })
     $.clock.every(REFRESH_MS, () => {
       void refresh($)
     })
@@ -121,4 +125,29 @@ export const register: Register = on => {
     }
     return next(e)
   })
+
+  on('command.run', { command: 'meter' }, async $ => {
+    if (await read($, isPaneOpen)) {
+      await $.ui.close({ id: PANE_ID })
+      await update($, isPaneOpen, () => false)
+      return { text: 'Pane closed.' }
+    }
+    await $.ui.open({ id: PANE_ID, title: 'Session meter' })
+    await update($, isPaneOpen, () => true)
+    return { text: 'Pane opened.' }
+  })
+
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE_ID) await update($, isPaneOpen, () => false)
+    return next(e)
+  })
+
+  on('ui.render', { component: 'Pane', requestId: 'session-meter' }, async ($, e) =>
+    meterView($.ui.resolve(e), {
+      snapshot: await read($, snapshot),
+      counters: await read($, counters),
+      now: await read($, checkedAt),
+      columns: e.props.bodyColumns,
+    }),
+  )
 }

@@ -73,7 +73,7 @@ export function stage(on: On): Stage {
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('session.end', () => ({}) as never)
+  on('session.end', () => ({ sessionId: 's1' }) as never)
   on('turn.step', async function* (_$, e) {
     yield CHUNK
     return {

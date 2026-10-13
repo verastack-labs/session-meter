@@ -59,6 +59,6 @@ test('the clock refreshes every 30 seconds after session start', async ($, on) =
 
 test('turn.complete and tool.call results pass through', async ($, on) => {
   stage(on)
-  expect(await $.turn.complete({ turnId: 't1', reason: 'answer' } as never)).toEqual({ text: 'done' })
+  expect(await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'ok' } as never)).toEqual({ text: 'done' })
   expect(await $.tool.call({ tool: 'Read', file_path: 'a.ts' })).toEqual({ result: { ok: true } })
 })
