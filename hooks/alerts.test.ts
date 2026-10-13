@@ -53,6 +53,15 @@ describe('window alerts', () => {
       [],
     ])
   })
+  test('thresholds use the rounded number the toast shows', () => {
+    expect(run([snap([five(82)]), snap([five(94.6)]), snap([five(95)])])).toEqual([
+      ['5-hour limit at 82%, resets in 2h 14m'],
+      ['5-hour limit at 95%, resets in 2h 14m'],
+      [],
+    ])
+    expect(run([snap([five(79.5)])])).toEqual([['5-hour limit at 80%, resets in 2h 14m']])
+    expect(run([snap([], 79.5)])).toEqual([['Context 80% full; consider /compact or /clear']])
+  })
   test('jumping from 70% to 96% fires only the 95% alert', () => {
     expect(run([snap([five(70)]), snap([five(96)]), snap([five(96)])])).toEqual([
       [],

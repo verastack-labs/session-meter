@@ -61,10 +61,11 @@ export function barCells(percent: number, width: number): number {
 
 export type Urgency = 'normal' | 'warning' | 'error'
 
-/** Yellow from 80%, red from 95%. */
+/** Yellow from 80%, red from 95%, judged on the rounded number the pane shows. */
 export function urgency(percent: number): Urgency {
-  if (percent >= 95) return 'error'
-  if (percent >= 80) return 'warning'
+  const shown = Math.round(percent)
+  if (shown >= 95) return 'error'
+  if (shown >= 80) return 'warning'
   return 'normal'
 }
 

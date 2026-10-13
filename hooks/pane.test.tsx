@@ -77,6 +77,16 @@ test('counts tokens, turns and tool calls', async ($, on) => {
   expect(await text(ui, 'turns')).toBe('Turns        1       Tool calls  3')
 })
 
+test('subagent turns are not counted as your turns; their tool calls are', async ($, on) => {
+  stage(on)
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'ok' } as never)
+  await $.turn.complete({ turnId: 't2', reason: 'answer', answer: 'ok', agentId: 'agent-1' } as never)
+  await $.tool.call({ tool: 'Read', file_path: 'a.ts' })
+  await $.tool.call({ tool: 'Read', file_path: 'b.ts', agentId: 'agent-1' } as never)
+  const ui = await mount($, 'terminal')
+  expect(await text(ui, 'turns')).toBe('Turns        1       Tool calls  2')
+})
+
 test('shows how old the figures are when reads keep failing', async ($, on) => {
   const seen = stage(on)
   await $.session.start({ cwd: '.', surface: 'terminal', isInteractive: true } as never)

@@ -109,7 +109,8 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     try {
-      await addTurn($)
+      // a subagent's or the engine's own fork has an agentId; only your turns count
+      if (e.agentId === undefined) await addTurn($)
       await refresh($)
     } catch {
       // counting never disturbs the turn

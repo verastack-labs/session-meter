@@ -21,14 +21,16 @@ function resetPhrase(resetsAt: string | undefined, now: number): string {
 /**
  * The toasts a new snapshot calls for. Each window alerts once at 80% and
  * once at 95% per window (keyed by its reset time); a jump past 95% fires only
- * the 95% alert. Context alerts at 80% and re-arms below 70%.
+ * the 95% alert. Context alerts at 80% and re-arms below 70%. Thresholds
+ * are judged on the rounded percentage the toast and pane show.
  */
 export function dueAlerts(snapshot: Snapshot, state: AlertState): { alerts: Alert[]; next: AlertState } {
   const alerts: Alert[] = []
   const fired = [...state.fired]
   for (const window of snapshot.windows) {
     if (!WARNED_KINDS.includes(window.kind)) continue
-    const keys = THRESHOLDS.filter(threshold => window.percentUsed >= threshold).map(
+    const shown = Math.round(window.percentUsed)
+    const keys = THRESHOLDS.filter(threshold => shown >= threshold).map(
       threshold => `${window.kind}:${window.resetsAt ?? ''}:${threshold}`,
     )
     const topKey = keys[keys.length - 1]
@@ -43,10 +45,11 @@ export function dueAlerts(snapshot: Snapshot, state: AlertState): { alerts: Aler
   let isContextArmed = state.isContextArmed
   const percent = snapshot.context.percent
   if (percent !== undefined) {
-    if (isContextArmed && percent >= CONTEXT_WARN) {
+    const shownPercent = Math.round(percent)
+    if (isContextArmed && shownPercent >= CONTEXT_WARN) {
       alerts.push({ key: 'context', text: `Context ${formatPercent(percent)} full; consider /compact or /clear` })
       isContextArmed = false
-    } else if (!isContextArmed && percent < CONTEXT_REARM) {
+    } else if (!isContextArmed && shownPercent < CONTEXT_REARM) {
       isContextArmed = true
     }
   }

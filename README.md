@@ -26,7 +26,7 @@ opens the pane, and running it again closes it. Bars turn yellow at 80% and red 
 
 ## Limits
 
-Usage windows appear only for accounts that report them, such as a Claude subscription; with an API key the pane says none are reported. Spend appears only when Claude Code reports a cost. Tokens, turns and tool calls count from when the mod loaded, and `/clear` starts them over.
+Usage windows appear only for accounts that report them, such as a Claude subscription; with an API key the pane says none are reported. Spend appears only when Claude Code reports a cost. Tokens, turns and tool calls count from when the mod loaded, and `/clear` starts them over. Turns are your own turns; tokens and tool calls include work done by subagents, since that work counts against your limits too.
 
 ## Development
 

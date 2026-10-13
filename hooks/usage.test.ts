@@ -86,10 +86,15 @@ describe('barCells', () => {
 
 describe('urgency', () => {
   test('turns yellow at 80 and red at 95', () => {
-    expect(urgency(79.9)).toBe('normal')
+    expect(urgency(79.4)).toBe('normal')
     expect(urgency(80)).toBe('warning')
-    expect(urgency(94.9)).toBe('warning')
+    expect(urgency(94.4)).toBe('warning')
     expect(urgency(95)).toBe('error')
+  })
+  test('judges the rounded number the pane shows', () => {
+    expect(urgency(79.5)).toBe('warning')
+    expect(urgency(94.5)).toBe('error')
+    expect(urgency(94.6)).toBe('error')
   })
 })
 
