@@ -143,12 +143,16 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: 'session-meter' }, async ($, e) =>
-    meterView($.ui.resolve(e), {
-      snapshot: await read($, snapshot),
-      counters: await read($, counters),
-      now: await read($, checkedAt),
-      columns: e.props.bodyColumns,
-    }),
-  )
+  on('ui.render', { component: 'Pane', requestId: 'session-meter' }, async ($, e) => {
+    const els = $.ui.resolve(e)
+    return meterView(
+      { Box: els.Box, Text: els.Text, Svg: e.surface !== 'terminal' && 'Svg' in els ? els.Svg : undefined },
+      {
+        snapshot: await read($, snapshot),
+        counters: await read($, counters),
+        now: await read($, checkedAt),
+        columns: e.props.bodyColumns,
+      },
+    )
+  })
 }
