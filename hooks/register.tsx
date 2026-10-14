@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
-import type { Counters, Snapshot } from '../types'
+import type { Counters, Reading, Snapshot } from '../types'
 import { INITIAL_ALERTS, dueAlerts } from './alerts'
 import type { Alert } from './alerts'
 import { statusText } from './status'
@@ -19,31 +19,46 @@ const ZERO_COUNTERS: Counters = {
   cacheWriteTokens: 0,
 }
 
-const snapshot = atom({ plugin: 'session-meter', key: 'snapshot' } as const, null as Snapshot | null)
+const reading = atom({ plugin: 'session-meter', key: 'reading' } as const, { snapshot: null, checkedAt: 0 } as Reading)
 const counters = atom({ plugin: 'session-meter', key: 'counters' } as const, ZERO_COUNTERS)
 const alerts = atom({ plugin: 'session-meter', key: 'alerts' } as const, INITIAL_ALERTS)
-const checkedAt = atom({ plugin: 'session-meter', key: 'checkedAt' } as const, 0)
 const isPaneOpen = atom({ plugin: 'session-meter', key: 'isPaneOpen' } as const, false)
+const statusShown = atom({ plugin: 'session-meter', key: 'statusShown' } as const, null as string | null)
 const PANE_ID = 'session-meter'
 
 type Dollar = Pick<EngineInterface, 'state' | 'session' | 'ui' | 'clock'>
 
+/** Sets the status line, only when its text differs from what it shows. */
+async function showStatus($: Dollar, text: string | undefined): Promise<void> {
+  const shown = text ?? ''
+  if ((await read($, statusShown)) === shown) return
+  await update($, statusShown, () => shown)
+  $.ui.status(text)
+}
+
 /**
  * Reads the usage figures, stores them, updates the status line and shows due
  * toasts. A failed read keeps the last figures; `checkedAt` still moves, so the
- * pane can say how old they are.
+ * pane can say how old they are. What the pane draws is written once, so a
+ * refresh redraws it once, and a read that started earlier than the stored one
+ * (a slow read finishing after a newer one) is dropped.
  */
 async function refresh($: Dollar): Promise<void> {
   const now = await $.clock.now()
-  await update($, checkedAt, () => now)
-  let next: Snapshot
+  let fresh: Snapshot | undefined
   try {
-    next = toSnapshot(await $.session.usage(), now)
+    fresh = toSnapshot(await $.session.usage(), now)
   } catch {
-    return
+    fresh = undefined
   }
-  await update($, snapshot, () => next)
-  $.ui.status(statusText(next))
+  let isNewest = false
+  await update($, reading, current => {
+    isNewest = fresh !== undefined && (current.snapshot === null || current.snapshot.readAt <= fresh.readAt)
+    return { snapshot: isNewest ? (fresh ?? null) : current.snapshot, checkedAt: Math.max(current.checkedAt, now) }
+  })
+  if (fresh === undefined || !isNewest) return
+  const next = fresh
+  await showStatus($, statusText(next))
   let due: Alert[] = []
   await update($, alerts, current => {
     const result = dueAlerts(next, current)
@@ -51,6 +66,16 @@ async function refresh($: Dollar): Promise<void> {
     return result.next
   })
   for (const alert of due) $.ui.toast(alert.text)
+}
+
+/** State outlives a reload, so whether the pane is open comes from the engine's own record. */
+async function syncPaneOpen($: Dollar): Promise<void> {
+  try {
+    const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
+    await update($, isPaneOpen, () => isOpen)
+  } catch {
+    // the meter never disturbs the session
+  }
 }
 
 async function addUsage($: Dollar, usage: TurnUsage): Promise<void> {
@@ -78,6 +103,7 @@ async function resetCounters($: Dollar): Promise<void> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'meter', description: 'Open or close the session-meter pane' })
+    await syncPaneOpen($)
     $.clock.every(REFRESH_MS, () => {
       void refresh($)
     })
@@ -145,12 +171,13 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: 'session-meter' }, async ($, e) => {
     const els = $.ui.resolve(e)
+    const { snapshot, checkedAt } = await read($, reading)
     return meterView(
       { Box: els.Box, Text: els.Text, Svg: e.surface !== 'terminal' && 'Svg' in els ? els.Svg : undefined },
       {
-        snapshot: await read($, snapshot),
+        snapshot,
         counters: await read($, counters),
-        now: await read($, checkedAt),
+        now: checkedAt,
         columns: e.props.bodyColumns,
       },
     )

@@ -110,3 +110,18 @@ describe('context alerts', () => {
     expect(run([snap([])])).toEqual([[]])
   })
 })
+
+// built directly: five(p, undefined) would take the default reset time
+const noReset = (percentUsed: number): LimitWindow => ({ kind: 'five_hour', percentUsed })
+
+test('a window with no reset time warns again after dropping well below a threshold', () => {
+  expect(run([snap([noReset(82)]), snap([noReset(65)]), snap([noReset(83)])])).toEqual([
+    ['5-hour limit at 82%'],
+    [],
+    ['5-hour limit at 83%'],
+  ])
+})
+
+test('a small dip below a threshold does not warn again', () => {
+  expect(run([snap([noReset(82)]), snap([noReset(78)]), snap([noReset(83)])])).toEqual([['5-hour limit at 82%'], [], []])
+})

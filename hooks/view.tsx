@@ -26,7 +26,9 @@ const LABEL = 12
 const USED = 5
 const GAP = 2
 const BAR_CELLS = 16
-const NARROW = 40
+/** The fewest cells the last column keeps, so a bar never pushes it off the row. */
+const END_MIN = 8
+const BAR_MIN = 6
 const STALE_MS = 120_000
 const FILLED = '█'
 const EMPTY = '░'
@@ -56,6 +58,15 @@ export function barSvg(percent: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_WIDTH}" height="${SVG_HEIGHT}" viewBox="0 0 ${SVG_WIDTH} ${SVG_HEIGHT}">${track}${filled}</svg>`
 }
 
+/**
+ * Bar cells for a pane `columns` wide: up to 16, what is left beside the label,
+ * the percent and the last column, or 0 to drop the bar.
+ */
+export function barCellsFor(columns: number): number {
+  const room = Math.min(BAR_CELLS, columns - LABEL - USED - 3 * GAP - END_MIN)
+  return room >= BAR_MIN ? room : 0
+}
+
 function rank(kind: string): number {
   const index = WINDOW_ORDER.indexOf(kind)
   return index === -1 ? WINDOW_ORDER.length : index
@@ -67,38 +78,38 @@ function resetText(window: LimitWindow, now: number): string {
   return countdown === 'now' ? 'now' : `in ${countdown}`
 }
 
-function bar(els: Els, key: string, label: string, percent: number) {
+function bar(els: Els, key: string, label: string, percent: number, cells: number) {
   const { Box, Text, Svg } = els
   if (Svg !== undefined) {
     return (
-      <Box key={`${key}-bar`} width={BAR_CELLS} alignItems="center">
-        <Svg source={barSvg(percent)} alt={`${label} ${formatPercent(percent)} used`} width={SVG_WIDTH} height={SVG_HEIGHT} />
+      <Box key={`${key}-bar`} width={cells} flexShrink={0} alignItems="center">
+        <Svg source={barSvg(percent)} alt={`${label} ${formatPercent(percent)} used`} width={Math.round((cells * SVG_WIDTH) / BAR_CELLS)} height={SVG_HEIGHT} />
       </Box>
     )
   }
-  const filled = barCells(percent, BAR_CELLS)
+  const filled = barCells(percent, cells)
   return (
-    <Box key={`${key}-bar`} width={BAR_CELLS}>
+    <Box key={`${key}-bar`} width={cells} flexShrink={0}>
       <Text>
         <Text color={COLOURS[urgency(percent)]}>{FILLED.repeat(filled)}</Text>
-        <Text dimColor>{EMPTY.repeat(BAR_CELLS - filled)}</Text>
+        <Text dimColor>{EMPTY.repeat(cells - filled)}</Text>
       </Text>
     </Box>
   )
 }
 
 /** One row of the limits table: label, used percent, bar when there is room, and the last column. */
-function gaugeRow(els: Els, key: string, label: string, percent: number, end: string, hasBars: boolean) {
+function gaugeRow(els: Els, key: string, label: string, percent: number, end: string, cells: number) {
   const { Box, Text } = els
   return (
     <Box flexDirection="row" columnGap={GAP}>
-      <Box key={`${key}-label`} width={LABEL}>
+      <Box key={`${key}-label`} width={LABEL} flexShrink={0}>
         <Text wrap="truncate-end">{label}</Text>
       </Box>
-      <Box key={`${key}-used`} width={USED} justifyContent="flex-end">
+      <Box key={`${key}-used`} width={USED} flexShrink={0} justifyContent="flex-end">
         <Text>{formatPercent(percent)}</Text>
       </Box>
-      {hasBars && bar(els, key, label, percent)}
+      {cells > 0 && bar(els, key, label, percent, cells)}
       <Box key={`${key}-end`} flexGrow={1}>
         <Text wrap="truncate-end">{end}</Text>
       </Box>
@@ -106,15 +117,15 @@ function gaugeRow(els: Els, key: string, label: string, percent: number, end: st
   )
 }
 
-function headerRow(els: Els, hasBars: boolean) {
+function headerRow(els: Els, cells: number) {
   const { Box, Text } = els
   return (
     <Box flexDirection="row" columnGap={GAP}>
-      <Box width={LABEL} />
-      <Box key="header-used" width={USED} justifyContent="flex-end">
+      <Box width={LABEL} flexShrink={0} />
+      <Box key="header-used" width={USED} flexShrink={0} justifyContent="flex-end">
         <Text dimColor>Used</Text>
       </Box>
-      {hasBars && <Box width={BAR_CELLS} />}
+      {cells > 0 && <Box width={cells} flexShrink={0} />}
       <Box key="header-end" flexGrow={1}>
         <Text dimColor>Resets</Text>
       </Box>
@@ -127,7 +138,7 @@ function figureRow(els: Els, key: string, label: string, value: string) {
   const { Box, Text } = els
   return (
     <Box flexDirection="row" columnGap={GAP}>
-      <Box width={LABEL}>
+      <Box width={LABEL} flexShrink={0}>
         <Text>{label}</Text>
       </Box>
       <Box key={key} flexGrow={1}>
@@ -139,7 +150,10 @@ function figureRow(els: Els, key: string, label: string, value: string) {
 
 function tokensIn(counters: Counters): string {
   const fresh = formatTokens(counters.inputTokens)
-  return counters.cacheReadTokens > 0 ? `${fresh}  (+${formatTokens(counters.cacheReadTokens)} read from cache)` : fresh
+  const cache: string[] = []
+  if (counters.cacheReadTokens > 0) cache.push(`+${formatTokens(counters.cacheReadTokens)} read from cache`)
+  if (counters.cacheWriteTokens > 0) cache.push(cache.length > 0 ? `+${formatTokens(counters.cacheWriteTokens)} written to it` : `+${formatTokens(counters.cacheWriteTokens)} written to cache`)
+  return cache.length > 0 ? `${fresh}  (${cache.join(', ')})` : fresh
 }
 
 /** The pane's drawing, per the spec's layout and its 0.2.0 amendment. */
@@ -155,7 +169,7 @@ export function meterView(els: Els, input: MeterInput): RenderElement {
       </Box>
     )
   }
-  const hasBars = columns >= NARROW
+  const cells = barCellsFor(columns)
   const windows = [...snapshot.windows].sort((a, b) => rank(a.kind) - rank(b.kind))
   const age = now - snapshot.readAt
   const { context } = snapshot
@@ -173,15 +187,15 @@ export function meterView(els: Els, input: MeterInput): RenderElement {
         </Box>
       ) : (
         [
-          headerRow(els, hasBars),
+          headerRow(els, cells),
           ...windows.map(window =>
-            gaugeRow(els, `window-${window.kind}`, WINDOW_LABELS[window.kind] ?? window.kind, window.percentUsed, resetText(window, now), hasBars),
+            gaugeRow(els, `window-${window.kind}`, WINDOW_LABELS[window.kind] ?? window.kind, window.percentUsed, resetText(window, now), cells),
           ),
         ]
       )}
       {context.percent === undefined ? (
         <Box flexDirection="row" columnGap={GAP}>
-          <Box key="context-label" width={LABEL}>
+          <Box key="context-label" width={LABEL} flexShrink={0}>
             <Text>Context</Text>
           </Box>
           <Box key="context-waiting" flexGrow={1}>
@@ -195,7 +209,7 @@ export function meterView(els: Els, input: MeterInput): RenderElement {
           'Context',
           context.percent,
           context.tokens === undefined ? '' : `${formatTokens(context.tokens)} of ${formatTokens(context.window)}`,
-          hasBars,
+          cells,
         )
       )}
       <Text> </Text>

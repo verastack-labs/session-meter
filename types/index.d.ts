@@ -20,17 +20,20 @@ export type Counters = {
   cacheWriteTokens: number
 }
 
+/** The last usage reading and when a refresh last ran, written together so a refresh redraws the pane once. */
+export type Reading = { snapshot: Snapshot | null; checkedAt: number }
+
 /** Which warnings were shown, and whether the context warning may fire again. */
 export type AlertState = { fired: string[]; isContextArmed: boolean }
 
 declare module 'claude-code' {
   interface PluginState {
     'session-meter': {
-      snapshot: Snapshot | null
+      reading: Reading
       counters: Counters
       alerts: AlertState
       isPaneOpen: boolean
-      checkedAt: number
+      statusShown: string | null
     }
   }
 }

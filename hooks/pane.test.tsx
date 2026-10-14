@@ -203,3 +203,25 @@ test('/meter opens and closes the pane', async ($, on) => {
   expect((await $.command.run(slash('meter'))).text).toBe('Pane closed.')
   expect((await $.command.run(slash('meter'))).text).toBe('Pane opened.')
 })
+
+for (const columns of [40, 41, 60]) {
+  test(`at ${columns} columns the fixed columns never shrink and the row fits`, async ($, on) => {
+    stage(on)
+    await modelStep($)
+    const ui = await mount($, 'desktop', columns)
+    const boxes = await ui.findAll({ type: 'Box' })
+    const cell = (suffix: string) => boxes.find(box => box.props.key === `context-${suffix}`)
+    const fixed = ['label', 'used', 'bar'].map(cell)
+    expect(fixed.every(box => box?.props.flexShrink === 0)).toBe(true)
+    const widths = fixed.map(box => Number(box?.props.width ?? 0))
+    expect(widths.reduce((a, b) => a + b, 0) + 3 * 2 + 8).toBeLessThanOrEqual(columns)
+  })
+}
+
+test('cache writes show beside cache reads', async ($, on) => {
+  const seen = stage(on)
+  seen.setStepUsage(tokens(1000, 200, 5000, 3000))
+  await modelStep($)
+  const ui = await mount($, 'terminal')
+  expect(await text(ui, 'tokens-in')).toBe('1k  (+5k read from cache, +3k written to it)')
+})

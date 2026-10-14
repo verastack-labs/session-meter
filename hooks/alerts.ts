@@ -10,6 +10,8 @@ const WARNED_KINDS: readonly string[] = ['five_hour', 'seven_day']
 const THRESHOLDS: readonly number[] = [80, 95]
 const CONTEXT_WARN = 80
 const CONTEXT_REARM = 70
+/** How far below a threshold a window must fall before that threshold may warn again. */
+const WINDOW_REARM_GAP = 10
 const MAX_FIRED = 50
 
 function resetPhrase(resetsAt: string | undefined, now: number): string {
@@ -30,6 +32,14 @@ export function dueAlerts(snapshot: Snapshot, state: AlertState): { alerts: Aler
   for (const window of snapshot.windows) {
     if (!WARNED_KINDS.includes(window.kind)) continue
     const shown = Math.round(window.percentUsed)
+    // a window whose usage fell well below a threshold has reset, reported or
+    // not, so that threshold may warn again; this is what re-arms a window that
+    // reports no reset time
+    const prefix = `${window.kind}:${window.resetsAt ?? ''}:`
+    for (let i = fired.length - 1; i >= 0; i -= 1) {
+      const key = fired[i] ?? ''
+      if (key.startsWith(prefix) && Number(key.slice(prefix.length)) - shown >= WINDOW_REARM_GAP) fired.splice(i, 1)
+    }
     const keys = THRESHOLDS.filter(threshold => shown >= threshold).map(
       threshold => `${window.kind}:${window.resetsAt ?? ''}:${threshold}`,
     )

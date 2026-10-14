@@ -51,6 +51,10 @@ export type Stage = {
   clock: MockClock
   setUsage: (usage: SessionUsage | 'fail') => void
   setStepUsage: (usage: TurnUsage | null) => void
+  /** The next usage read answers `usage` after `delayMs` on the mock clock; later reads use the set usage. */
+  queueUsage: (usage: SessionUsage, delayMs: number) => void
+  /** The ids of the panes the engine holds open. */
+  panes: string[]
 }
 
 /** Stands in for everything beneath the mod. Call it before the test's first `$` call. */
@@ -60,7 +64,16 @@ export function stage(on: On): Stage {
   const statuses: (string | undefined)[] = []
   const toasts: string[] = []
   const clock = mock.clock(on, { now: NOW })
-  on('session.usage', () => (usage === 'fail' ? { deny: 'usage unavailable' } : { value: usage }))
+  const queued: { usage: SessionUsage; delayMs: number }[] = []
+  const panes: string[] = []
+  on('session.usage', async () => {
+    const next = queued.shift()
+    if (next !== undefined) {
+      await clock.sleep(next.delayMs)
+      return { value: next.usage }
+    }
+    return usage === 'fail' ? { deny: 'usage unavailable' } : { value: usage }
+  })
   on('ui.status', ($, e) => {
     statuses.push(e.text)
     return { value: undefined }
@@ -70,8 +83,15 @@ export function stage(on: On): Stage {
     return { value: undefined }
   })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.close', () => ({ value: undefined }))
+  on('ui.open', ($, e) => {
+    panes.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($, e) => {
+    panes.splice(0, panes.length, ...panes.filter(id => id !== e.id))
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({ value: panes.map(id => ({ id, title: 'Session meter', isShown: true, isFocused: false, isPlaced: true })) as never }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.end', () => ({ sessionId: 's1' }) as never)
   on('turn.step', async function* (_$, e) {
@@ -97,6 +117,10 @@ export function stage(on: On): Stage {
     setStepUsage: next => {
       stepUsage = next
     },
+    queueUsage: (next, delayMs) => {
+      queued.push({ usage: next, delayMs })
+    },
+    panes,
   }
 }
 
