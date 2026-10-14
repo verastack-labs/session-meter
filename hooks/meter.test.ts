@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { CHUNK, modelStep, slash, stage, tokens, usageOf } from './helpers'
+import { CHUNK, measure, modelStep, slash, stage, stepOnly, tokens, usageOf } from './helpers'
 
 test('the response stream and result pass through unchanged', async ($, on) => {
   stage(on)
@@ -97,4 +97,18 @@ test('a fresh start trusts the engine about whether the pane is open', async ($,
   seen.panes.splice(0)
   await $.session.start({ cwd: '.', surface: 'terminal', isInteractive: true } as never)
   expect((await $.command.run(slash('meter'))).text).toBe('Pane opened.')
+})
+
+test('a model request reads no usage while its response is in flight', async ($, on) => {
+  const seen = stage(on)
+  await stepOnly($)
+  expect(seen.usageReads()).toBe(0)
+  expect(seen.statuses).toEqual([])
+})
+
+test('the engine measuring the session refreshes the meter', async ($, on) => {
+  const seen = stage(on)
+  await measure($)
+  expect(seen.usageReads()).toBe(1)
+  expect(seen.statuses).toEqual(['5h 62% · ctx 41%'])
 })

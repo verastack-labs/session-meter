@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { PANE_PROPS, modelStep, slash, stage, tokens, usageOf } from './helpers'
+import { PANE_PROPS, measure, modelStep, slash, stage, tokens, usageOf } from './helpers'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -147,6 +147,7 @@ test('subagent turns are not counted as your turns; their tool calls are', async
   await $.turn.complete({ turnId: 't2', reason: 'answer', answer: 'ok', agentId: 'agent-1' } as never)
   await $.tool.call({ tool: 'Read', file_path: 'a.ts' })
   await $.tool.call({ tool: 'Read', file_path: 'b.ts', agentId: 'agent-1' } as never)
+  await measure($)
   const ui = await mount($, 'terminal')
   expect(await text(ui, 'turns')).toBe('1')
   expect(await text(ui, 'tool-calls')).toBe('2')

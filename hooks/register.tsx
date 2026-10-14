@@ -124,10 +124,22 @@ export const register: Register = on => {
   on('turn.step', async function* ($, e, next) {
     const result = yield* next(e)
     try {
+      // only an in-memory count here: the usage read waits for session.measure,
+      // so nothing the meter does sits in the response path
       if (result.usage !== null) await addUsage($, result.usage)
-      await refresh($)
     } catch {
       // counting never disturbs the response
+    }
+    return result
+  })
+
+  // the engine measures after each turn and when a limit window moves a point
+  on('session.measure', async ($, e, next) => {
+    const result = await next(e)
+    try {
+      await refresh($)
+    } catch {
+      // the meter never disturbs the session
     }
     return result
   })
@@ -137,7 +149,6 @@ export const register: Register = on => {
     try {
       // a subagent's or the engine's own fork has an agentId; only your turns count
       if (e.agentId === undefined) await addTurn($)
-      await refresh($)
     } catch {
       // counting never disturbs the turn
     }

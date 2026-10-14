@@ -55,6 +55,8 @@ export type Stage = {
   queueUsage: (usage: SessionUsage, delayMs: number) => void
   /** The ids of the panes the engine holds open. */
   panes: string[]
+  /** How many times the mod has read `$.session.usage()`. */
+  usageReads: () => number
 }
 
 /** Stands in for everything beneath the mod. Call it before the test's first `$` call. */
@@ -66,7 +68,9 @@ export function stage(on: On): Stage {
   const clock = mock.clock(on, { now: NOW })
   const queued: { usage: SessionUsage; delayMs: number }[] = []
   const panes: string[] = []
+  let reads = 0
   on('session.usage', async () => {
+    reads += 1
     const next = queued.shift()
     if (next !== undefined) {
       await clock.sleep(next.delayMs)
@@ -106,6 +110,7 @@ export function stage(on: On): Stage {
     } as never
   })
   on('turn.complete', () => ({ text: 'done' }))
+  on('session.measure', ($, e) => ({ changed: e.changed }))
   on('tool.call', () => ({ result: { ok: true } }) as never)
   return {
     statuses,
@@ -121,11 +126,13 @@ export function stage(on: On): Stage {
       queued.push({ usage: next, delayMs })
     },
     panes,
+    usageReads: () => reads,
   }
 }
 
 /** Raises one model request and reads it to the end. */
-export async function modelStep($: Engine): Promise<{ chunks: unknown[]; result: { answer: string; usage: unknown } }> {
+/** Raises one model request and reads it to the end, and nothing else. */
+export async function stepOnly($: Engine): Promise<{ chunks: unknown[]; result: { answer: string; usage: unknown } }> {
   const stream = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 })
   const chunks: unknown[] = []
   let step = await stream.next()
@@ -134,6 +141,18 @@ export async function modelStep($: Engine): Promise<{ chunks: unknown[]; result:
     step = await stream.next()
   }
   return { chunks, result: step.value as never }
+}
+
+/** The measurement the engine raises after a turn. */
+export async function measure($: Engine): Promise<void> {
+  await $.session.measure({ context: { window: 200_000 }, rateLimits: [], changed: ['context'] } as never)
+}
+
+/** One model request, then the measurement the engine raises after it, as in a real turn. */
+export async function modelStep($: Engine): Promise<{ chunks: unknown[]; result: { answer: string; usage: unknown } }> {
+  const step = await stepOnly($)
+  await measure($)
+  return step
 }
 
 /** The arguments `$.command.run` needs for a slash command typed at the prompt. */
